@@ -16,6 +16,10 @@ import { setDeviceId } from "@/store/app/appSlice";
 import { useAppDispatch } from "@/hooks/redux-hooks";
 import Header from "@/components/Header";
 import { showToast } from "@/util/notify";
+import {
+  registerForPushNotifications,
+  setupNotificationHandlers,
+} from "@/services/notifications";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -99,28 +103,29 @@ export default function TabLayout() {
   const navigationRef = useNavigationContainerRef();
 
   useEffect(() => {
-    // Handle notification taps when app is in foreground
-    const subscription = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        showToast(notification.request.content.body || "New notification");
+    // Register for push notifications
+    registerForPushNotifications()
+      .then((token) => {
+        // Store/send this token to your server
+        console.log("Push token:", token);
+      })
+      .catch((error) => {
+        console.warn("Notification registration error:", error);
+      });
+
+    // Setup notification handlers
+    const cleanupHandlers = setupNotificationHandlers(navigationRef);
+
+    // Notification count handler
+    const countSubscription = Notifications.addNotificationReceivedListener(
+      () => {
+        setNotificationCount((prev) => prev + 1);
       }
     );
 
-    // Handle notification taps when app is in background/quit
-    const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-
-        if (data?.url) {
-          Linking.openURL(data.url);
-        } else if (data?.screen) {
-          navigationRef.current?.navigate(data.screen, data.params);
-        }
-      });
-
     return () => {
-      subscription.remove();
-      responseSubscription.remove();
+      cleanupHandlers();
+      countSubscription.remove();
     };
   }, [navigationRef]);
 
