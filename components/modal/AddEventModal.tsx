@@ -11,6 +11,7 @@ import { Button, TextInput, Text, useTheme } from "react-native-paper";
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from "@react-native-community/datetimepicker";
+import moment from "moment";
 
 interface AddEventModalProps {
   isOpen: boolean;
@@ -25,16 +26,29 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   onSubmit,
   existingEvent,
 }) => {
-  const [title, setTitle] = useState(existingEvent?.title || "");
-  const [date, setDate] = useState(existingEvent?.date || new Date());
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(() => {
+    const initialDate = new Date();
+    initialDate.setHours(initialDate.getHours() + 1);
+    return initialDate;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const theme = useTheme();
   const [showPicker, setShowPicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
 
   const handleSubmit = () => {
     if (!title.trim()) return;
-    onSubmit({ title, date });
-    onClose();
+    setIsSubmitting(true);
+    try {
+      onSubmit({ title, date });
+      onClose();
+    } catch (error) {
+      // Error is handled by parent component
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const quickTimeOptions = [
@@ -66,8 +80,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
   };
 
   const onChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
     if (selectedDate) {
+      if (selectedDate < new Date()) {
+        setDateError("Event date cannot be in the past");
+      } else {
+        setDateError(null);
+      }
+      setShowPicker(false);
       setDate(selectedDate);
     }
   };
@@ -78,7 +97,7 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
       style={styles.modal}
       onBackdropPress={onClose}
       backdropTransitionOutTiming={0}
-      avoidKeyboard={true} // This helps with keyboard avoidance
+      avoidKeyboard={true}
       propagateSwipe={true}
     >
       <KeyboardAvoidingView
@@ -110,9 +129,13 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             onPress={showPickerHandler}
             style={[styles.dateButton, { borderColor: theme.colors.outline }]}
           >
-            <Text variant="bodyMedium">{date.toLocaleString()}</Text>
+            <Text variant="bodyMedium">{moment(date).calendar()}</Text>
           </TouchableOpacity>
-
+          {dateError && (
+            <Text style={[styles.errorText, { color: theme.colors.error }]}>
+              {dateError}
+            </Text>
+          )}
           {showPicker && Platform.OS === "ios" && (
             <DateTimePicker
               value={date}
@@ -148,7 +171,8 @@ export const AddEventModal: React.FC<AddEventModalProps> = ({
             mode="contained"
             onPress={handleSubmit}
             style={styles.submitButton}
-            disabled={!title.trim()}
+            disabled={!title.trim() || isSubmitting || dateError !== null}
+            loading={isSubmitting}
           >
             {existingEvent ? "Update Event" : "Add Event"}
           </Button>
@@ -205,5 +229,9 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 8,
+  },
+  errorText: {
+    marginBottom: 16,
+    fontSize: 14,
   },
 });

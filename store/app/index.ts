@@ -7,7 +7,7 @@ import {
   UpdateEventRequest,
 } from "@/types";
 
-const authBaseQuery = createBaseQuery("http://192.168.1.14:3000");
+const authBaseQuery = createBaseQuery("http://192.168.100.24:3000");
 export const appApi = createApi({
   reducerPath: "appApi",
   baseQuery: baseQueryWithReauth(authBaseQuery),
@@ -59,10 +59,13 @@ export const appApi = createApi({
         return response;
       },
     }),
-    getUpcomingEvents: builder.query<EventResponse[], string>({
-      query: (userId) => {
+    getUpcomingEvents: builder.query<
+      EventResponse[],
+      { userId: string; upcoming: string }
+    >({
+      query: ({ userId, upcoming }) => {
         return {
-          url: `/api/events?userId=${userId}`,
+          url: `/api/events?userId=${userId}&upcomingOnly=${upcoming}`,
         };
       },
       transformResponse: (response: any) => {

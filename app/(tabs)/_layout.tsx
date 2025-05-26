@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Link, Tabs } from "expo-router";
-import { Pressable, View, Text, useColorScheme } from "react-native";
+import { Tabs, useNavigationContainerRef } from "expo-router";
+import { View, Text, Linking } from "react-native";
 import { useTheme } from "react-native-paper";
 
-import Colors from "@/constants/Colors";
-import { useClientOnlyValue } from "@/components/useClientOnlyValue";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
@@ -17,6 +15,7 @@ import { getBestDeviceIdentifier } from "@/util/helpers";
 import { setDeviceId } from "@/store/app/appSlice";
 import { useAppDispatch } from "@/hooks/redux-hooks";
 import Header from "@/components/Header";
+import { showToast } from "@/util/notify";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -26,8 +25,6 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-
-// ... (keep your existing helper functions: handleRegistrationError and registerForPushNotificationsAsync)
 
 function handleRegistrationError(errorMessage: string) {
   alert(errorMessage);
@@ -99,6 +96,33 @@ export default function TabLayout() {
     Notifications.Notification | undefined
   >(undefined);
   const [notificationCount, setNotificationCount] = useState(0);
+  const navigationRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    // Handle notification taps when app is in foreground
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        showToast(notification.request.content.body || "New notification");
+      }
+    );
+
+    // Handle notification taps when app is in background/quit
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data;
+
+        if (data?.url) {
+          Linking.openURL(data.url);
+        } else if (data?.screen) {
+          navigationRef.current?.navigate(data.screen, data.params);
+        }
+      });
+
+    return () => {
+      subscription.remove();
+      responseSubscription.remove();
+    };
+  }, [navigationRef]);
 
   const setUserTokenHandler = async () => {
     let userId = await getBestDeviceIdentifier();
