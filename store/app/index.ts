@@ -3,11 +3,12 @@ import { baseQueryWithReauth, createBaseQuery } from "../configure";
 import {
   AddEventRequest,
   EventResponse,
+  EventResponseData,
   SetDeviceTokenRequest,
   UpdateEventRequest,
 } from "@/types";
 
-const authBaseQuery = createBaseQuery("http://192.168.100.24:3000");
+const authBaseQuery = createBaseQuery("http://192.168.1.184:3000");
 export const appApi = createApi({
   reducerPath: "appApi",
   baseQuery: baseQueryWithReauth(authBaseQuery),
@@ -61,11 +62,14 @@ export const appApi = createApi({
     }),
     getUpcomingEvents: builder.query<
       EventResponse[],
-      { userId: string; upcoming: string }
+      { userId: string; upcoming: string; limit: number; lastEvaluatedKey:{id:string,eventTime:string} }
     >({
-      query: ({ userId, upcoming }) => {
+      query: ({ userId, upcoming, limit, lastEvaluatedKey }) => {
+        const lastKeyEncoded = encodeURIComponent(
+          JSON.stringify(lastEvaluatedKey)
+        );
         return {
-          url: `/api/events?userId=${userId}&upcomingOnly=${upcoming}`,
+          url: `/api/events?userId=${userId}&upcomingOnly=${upcoming}&limit=${limit}&lastEvaluatedKey=${lastKeyEncoded}`,
         };
       },
       transformResponse: (response: any) => {

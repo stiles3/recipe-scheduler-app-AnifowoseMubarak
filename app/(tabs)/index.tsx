@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Text,
+  ActivityIndicator,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import {
@@ -13,6 +14,7 @@ import {
   IconButton,
   useTheme,
   SegmentedButtons,
+  Menu,
 } from "react-native-paper";
 import { router } from "expo-router";
 import { AddEventModal } from "@/components/modal/AddEventModal";
@@ -31,6 +33,8 @@ type OptimisticUpdates = {
   deletes: string[];
 };
 
+type SortDirection = "asc" | "desc";
+
 export default function Home() {
   const theme = useTheme();
   const { colors } = theme;
@@ -48,6 +52,12 @@ export default function Home() {
   const [eventFilter, setEventFilter] = useState<"upcoming" | "all">(
     "upcoming"
   );
+  const [lastEvaluatedKey, setLastEvaluatedKey] = useState<any>(null);
+  const [limit, setLimit] = useState(10);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
+
   const {
     data: serverEvents,
     isLoading: eventLoading,
@@ -56,25 +66,31 @@ export default function Home() {
   } = useGetUpcomingEventsQuery({
     userId: deviceId,
     upcoming: eventFilter === "upcoming" ? "true" : "false",
+    limit,
+    lastEvaluatedKey,
   });
+
   const [deleteEvent] = useDeleteEventMutation();
   const reload = useAppSelector((state) => state.app.reload);
 
   useEffect(() => {
     if (serverEvents) {
+    //  setLastEvaluatedKey(serverEvents?.lastEvaluatedKey);
       let filteredEvents = serverEvents.filter(
         (event) => !optimisticUpdates.deletes.includes(event.id)
       );
       filteredEvents = [...filteredEvents, ...optimisticUpdates.adds];
 
-      filteredEvents.sort(
-        (a, b) =>
-          new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime()
-      );
+      filteredEvents.sort((a, b) => {
+        const dateA = new Date(a.eventTime).getTime();
+        const dateB = new Date(b.eventTime).getTime();
+        return sortDirection === "asc" ? dateA - dateB : dateB - dateA;
+      });
 
       setEvents(filteredEvents);
+      setIsLoadingMore(false);
     }
-  }, [serverEvents, optimisticUpdates]);
+  }, [serverEvents, optimisticUpdates, sortDirection]);
 
   useEffect(() => {
     if (reload) {
@@ -83,8 +99,12 @@ export default function Home() {
       setOptimisticUpdates({ adds: [], deletes: [] });
     }
   }, [reload, refetch, dispatch]);
+
   useEffect(() => {
     if (eventFilter) {
+      // Reset pagination when filter changes
+      setLastEvaluatedKey(null);
+      setEvents([]);
       refetch();
     }
   }, [eventFilter]);
@@ -92,6 +112,7 @@ export default function Home() {
   useEffect(() => {
     if (fetchError) {
       Alert.alert("Error", "Failed to load events");
+      setIsLoadingMore(false);
     }
   }, [fetchError]);
 
@@ -155,7 +176,16 @@ export default function Home() {
     }
   };
 
-  console.log({ isModalVisible }, "sd");
+  const loadMoreEvents = () => {
+    if (lastEvaluatedKey && !isLoadingMore) {
+      setIsLoadingMore(true);
+      setLimit((prevLimit) => prevLimit + 10);
+    }
+  };
+
+  const toggleSortDirection = () => {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  };
 
   const renderRightActions = (id: string) => (
     <View style={[styles.deleteContainer, { backgroundColor: colors.surface }]}>
@@ -167,6 +197,15 @@ export default function Home() {
       />
     </View>
   );
+
+  const renderFooter = () => {
+    if (!isLoadingMore) return null;
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator animating size="small" color={colors.primary} />
+      </View>
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -201,6 +240,19 @@ export default function Home() {
     segmentedButtons: {
       margin: 16,
     },
+    headerContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 16,
+    },
+    sortButton: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    footer: {
+      paddingVertical: 20,
+    },
   });
 
   const isPending = (id: string) => {
@@ -209,25 +261,62 @@ export default function Home() {
       optimisticUpdates.deletes.includes(id)
     );
   };
-  console.log(eventFilter);
 
   return (
     <View style={styles.container}>
-      <SegmentedButtons
-        value={eventFilter}
-        onValueChange={(value) => setEventFilter(value as "upcoming" | "all")}
-        buttons={[
-          {
-            value: "upcoming",
-            label: "Upcoming",
-          },
-          {
-            value: "all",
-            label: "All",
-          },
-        ]}
-        style={styles.segmentedButtons}
-      />
+      <View style={styles.headerContainer}>
+        <SegmentedButtons
+          value={eventFilter}
+          onValueChange={(value) => {
+            setEventFilter(value as "upcoming" | "all");
+            setLastEvaluatedKey(null);
+            setEvents([]);
+          }}
+          buttons={[
+            {
+              value: "upcoming",
+              label: "Upcoming",
+            },
+            {
+              value: "all",
+              label: "All",
+            },
+          ]}
+          style={[styles.segmentedButtons, { flex: 1, marginRight: 8 }]}
+        />
+
+        <Menu
+          visible={sortMenuVisible}
+          onDismiss={() => setSortMenuVisible(false)}
+          anchor={
+            <IconButton
+              icon={
+                sortDirection === "asc"
+                  ? "sort-calendar-ascending"
+                  : "sort-calendar-descending"
+              }
+              onPress={() => setSortMenuVisible(true)}
+            />
+          }
+        >
+          <Menu.Item
+            leadingIcon="sort-calendar-ascending"
+            title="Sort Ascending"
+            onPress={() => {
+              setSortDirection("asc");
+              setSortMenuVisible(false);
+            }}
+          />
+          <Menu.Item
+            leadingIcon="sort-calendar-descending"
+            title="Sort Descending"
+            onPress={() => {
+              setSortDirection("desc");
+              setSortMenuVisible(false);
+            }}
+          />
+        </Menu>
+      </View>
 
       {eventLoading && !serverEvents ? (
         <List.Item
@@ -303,6 +392,9 @@ export default function Home() {
               left={(props) => <List.Icon {...props} icon="calendar-blank" />}
             />
           }
+          onEndReached={loadMoreEvents}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
         />
       )}
 

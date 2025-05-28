@@ -137,6 +137,7 @@ export default function TabLayout() {
         userId: userId,
         token: expoPushToken,
       }).unwrap();
+      console.log("success")
     } catch (error) {
       console.log({ error });
     }
